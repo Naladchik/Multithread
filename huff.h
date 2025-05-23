@@ -14,4 +14,5 @@ void CreateCodes(struct Node * ptr, int depth); // depth argument is needed to i
 void MakeFrequencies(char * source_file); // makes input array of nodes already sorted and ready for the Huffman tree building
 struct Node * CreateEmptyNode(void); //utility function
 
+
 #endif

@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include "huff.h"
 
-//#define DEBUG // comment - uncomment
-
 /* Defines */
 #define SYM_MAX 255
 #define CODE_LEN_MAX 32 // bits

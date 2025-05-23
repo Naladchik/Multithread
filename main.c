@@ -111,7 +111,6 @@ int main() {
     	strcat(str_buf, str_arr[i]);
     	thr_arg_arr[i].in_file = str_buf;
     	strcpy(str_buf, OUT_DIR);
-
     	strcat(str_buf, "/");
     	strcat(str_buf, str_arr[i]);
     	strcat(str_buf, ".xxx");
