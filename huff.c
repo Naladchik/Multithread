@@ -5,10 +5,6 @@
 #include "huff.h"
 
 /* Global variables */
-//struct Node * gv_root = NULL;                     //pointer to the root of the Huffman tree when it's built
-
-uint32_t      gv_text_len = 0;                    //length of text stored in gv_text_big_buff in symbomls
-
 uint32_t      gv_bytes_len = 0;                   //number of bytes in the buffer including the header
 
 bool gv_code_error = false;
@@ -177,7 +173,7 @@ void CreateCodes(struct Node* ptr, int depth, uint32_t* lut_codes, uint8_t* lut_
     }
 }
 
-uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len){
+uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len, uint32_t text_len){
     // bytes 0 - 3 contain size of input text (less number - less significat byte)
     // byte 4 contains number of coded symbols
     // byte4 * 5 bytes contain symbol and four bytes of frequency for this symbol
@@ -189,7 +185,7 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
     uint32_t mask = 0;
     uint8_t shift = 0;
 
-    *((uint32_t *) (&(bin_buff[0]))) = gv_text_len; // 4 bytes 0, 1, 2 and 3
+    *((uint32_t *) (&(bin_buff[0]))) = text_len; // 4 bytes 0, 1, 2 and 3
 
     //table part
     bin_buff[4] = nodes_len;
@@ -203,7 +199,7 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
 
     //coding part
     out_idx_bit = out_idx * 8;
-    for(int i = 0; i < gv_text_len; i++){
+    for(int i = 0; i < text_len; i++){
         mask = lut_codes[text_buf[i]];
         for(char j = (lut_lengths[text_buf[i]] - 1); j >=0; j--){
             out_idx = out_idx_bit / 8;
@@ -219,7 +215,7 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
     return(gv_bytes_len);
 }
 
-void unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
+uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
     // bytes 0 - 3 contain size of input text (less number - less significat byte)
     // byte 4 contains number of coded symbols
     // byte4 * 5 bytes contain symbol and four bytes of frequency for this symbol
@@ -233,10 +229,10 @@ void unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
     start_idx *= 8; // convert it into starting bit
 
     // extract length of text
-    gv_text_len = *((uint32_t *) (&(bin_buff[0])));
+    uint32_t read_text_len = *((uint32_t *) (&(bin_buff[0])));
 
     for(uint32_t i = start_idx; i < 4000000000; i++){ // go bit by bit from MSB to LSB
-        if(text_counter == gv_text_len) break;
+        if(text_counter == read_text_len) break;
         if(bin_buff[i/8] & (0x80 >> (i%8))){ //1
             if(!ptr->leaf){ ptr->leaf;
                 ptr = ptr->right;
@@ -257,9 +253,10 @@ void unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
             }
         }
     }
+    return(read_text_len);
 }
 
-uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr){
+uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr, uint32_t* txt_len){
     char ch;
     uint32_t in_idx = 0;
     uint32_t lut_frequencies[SYM_MAX] = {0};
@@ -281,7 +278,7 @@ uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** node
             }
         }while(ch != EOF);
         fclose(in_f);
-        gv_text_len = in_idx - 1;
+        *txt_len = in_idx - 1;
     }
 
     //making a sorted (by frequencies in decreasing order) array of nodes
@@ -319,8 +316,9 @@ void compress(char * source_file, char * output_file){
     uint8_t       gv_lut_lengths[SYM_MAX] = {0};      //look up table to get length of code for compression
     uint8_t       gv_nodes_len;                     //size of set of symbols to be coded in the Huffman tree
     struct Node * gv_root = NULL;
+    uint32_t      gv_text_len = 0;                    //length of text stored in gv_text_big_buff in symbomls
 
-    gv_nodes_len = MakeFrequencies(source_file, gv_text_big_buff, gv_arr_nodes);
+    gv_nodes_len = MakeFrequencies(source_file, gv_text_big_buff, gv_arr_nodes, &gv_text_len);
     if(gv_code_error){ printf(" ERROR!!! Unaccepted symbol code"); goto FINISH; }
     gv_root = CreateHuffTree(gv_arr_nodes, gv_nodes_len);
 
@@ -330,7 +328,7 @@ void compress(char * source_file, char * output_file){
         printf("Something went wrong during Huffman tree creatiion\n");
     }
 
-    zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len);
+    zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len, gv_text_len);
     DeleteTree(gv_root);
 
     FILE *write_ptr;
@@ -382,14 +380,14 @@ void uncompress(char * source_file, char * output_file){
         gv_root = CreateHuffTree(gv_arr_nodes, gv_nodes_len);
 
         //decode text
-        unzip(gv_bin_big_buff, gv_text_big_buff, gv_root);
+        uint32_t text_len = unzip(gv_bin_big_buff, gv_text_big_buff, gv_root);
 
         DeleteTree(gv_root);
 
         //write text to the file
         FILE *write_ptr;
         write_ptr = fopen(output_file,"w");  // w for write
-        fwrite(gv_text_big_buff, gv_text_len, 1, write_ptr); // write 
+        fwrite(gv_text_big_buff, text_len, 1, write_ptr); // write
         fclose(write_ptr);
 
     }
