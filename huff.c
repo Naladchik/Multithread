@@ -4,32 +4,10 @@
 #include <stdbool.h>
 #include "huff.h"
 
-/* Defines */
-#define SYM_MAX 255
-#define CODE_LEN_MAX 32 // bits
-#define MAX_BUFFER 255000000 //max length of input text in symbols
-#define H_OFFSET 5 // for header in zip file
-#define S_COEFF 5 // for header in zip file
-
-/* Types */
-struct Node{
-    uint32_t freq;
-    char ch;
-    bool leaf;
-    struct Node * left;
-    struct Node * right;
-};
-
 /* Global variables */
-struct Node * gv_arr_nodes[SYM_MAX] = {NULL};     //array of nodes for building the Huffman tree
-uint8_t       gv_nodes_len = 0;                     //size of set of symbols to be coded in the Huffman tree
-
-struct Node * gv_root = NULL;                     //pointer to the root of the Huffman tree when it's built
+//struct Node * gv_root = NULL;                     //pointer to the root of the Huffman tree when it's built
 
 uint32_t      gv_text_len = 0;                    //length of text stored in gv_text_big_buff in symbomls
-
-uint32_t      gv_lut_codes[SYM_MAX] = {0};        //look up table to get code for compression
-uint8_t       gv_lut_lengths[SYM_MAX] = {0};      //look up table to get length of code for compression
 
 uint32_t      gv_bytes_len = 0;                   //number of bytes in the buffer including the header
 
@@ -48,10 +26,10 @@ struct Node * CreateEmptyNode(void){
 }
 
 /* Returns pointer to root */
-struct Node * CreateHuffTree(){
+struct Node * CreateHuffTree(struct Node ** nodes_arr, uint8_t nodes_len){
     // Create the Huffman tree
-    struct Node * arr_subtrees[gv_nodes_len];
-    int16_t idx_leaves = gv_nodes_len - 1; // we start taking leaves from end of array (frequencies are in decreacing order)
+    struct Node * arr_subtrees[nodes_len];
+    int16_t idx_leaves = nodes_len - 1; // we start taking leaves from end of array (frequencies are in decreacing order)
     int16_t idx_subtrees = -1; // -1 means array is empty
     int16_t idx_to_put = 0; // -1 means array is empty
     struct  Node * node1 = NULL; // temporary node pointer
@@ -60,24 +38,24 @@ struct Node * CreateHuffTree(){
     uint8_t num_nodes = 0; // number of currently taken nodes
     bool finish = false;
 
-    for(uint16_t i = 0; i < gv_nodes_len * gv_nodes_len + 10; i++){
+    for(uint16_t i = 0; i < nodes_len * nodes_len + 10; i++){
         if(!finish){
             switch(num_nodes){
                 case 0: // take first element                 
                     if((idx_leaves >= 0) && (idx_subtrees >= 0)){ //if both arrays are not empty
                         // choose between a leaf and a subtree
-                        if(arr_subtrees[idx_subtrees]->freq < gv_arr_nodes[idx_leaves]->freq){
+                        if(arr_subtrees[idx_subtrees]->freq < nodes_arr[idx_leaves]->freq){
                             node1 = arr_subtrees[idx_subtrees];
                             idx_subtrees--;
                             num_nodes++;
                         }else{
-                            node1 = gv_arr_nodes[idx_leaves];
+                            node1 = nodes_arr[idx_leaves];
                             idx_leaves--;
                             num_nodes++;
                         }
                     }else{
                         if(idx_leaves >= 0){ // have only leaves available
-                            node1 = gv_arr_nodes[idx_leaves];
+                            node1 = nodes_arr[idx_leaves];
                             idx_leaves--;
                             num_nodes++;
                             if(0 > idx_leaves){ // scenario when only 1 leaf
@@ -106,18 +84,18 @@ struct Node * CreateHuffTree(){
                 case 1: // take second element
                     if((idx_leaves >= 0) && (idx_subtrees >= 0)){
                         // choose between a leaf and a subtree
-                        if(arr_subtrees[idx_subtrees]->freq < gv_arr_nodes[idx_leaves]->freq){
+                        if(arr_subtrees[idx_subtrees]->freq < nodes_arr[idx_leaves]->freq){
                             node2 = arr_subtrees[idx_subtrees];
                             idx_subtrees--;
                             num_nodes++;
                         }else{
-                            node2 = gv_arr_nodes[idx_leaves];
+                            node2 = nodes_arr[idx_leaves];
                             idx_leaves--;
                             num_nodes++;
                         }
                     }else{
                         if(idx_leaves >= 0){ // have only a leaf available
-                            node2 = gv_arr_nodes[idx_leaves];
+                            node2 = nodes_arr[idx_leaves];
                             idx_leaves--;
                             num_nodes++;
                         }else{
@@ -172,34 +150,34 @@ struct Node * CreateHuffTree(){
 
 // Creates huffman codes from the root of Huffman Tree.
 // It's a recursion
-void CreateCodes(struct Node* ptr, int depth){
+void CreateCodes(struct Node* ptr, int depth, uint32_t* lut_codes, uint8_t* lut_lengths){
     static uint16_t idx = 0; // current number of resolved symbols (leaves aproached)
     static uint8_t arr01[CODE_LEN_MAX]; // buffer-array for storing 0 and 1 of code    
     // Assign 0 to left edge and recur
     if (ptr->left) { 
         arr01[depth] = 0;
-        CreateCodes(ptr->left, depth + 1);
+        CreateCodes(ptr->left, depth + 1, lut_codes, lut_lengths);
     }
  
     // Assign 1 to right edge and recur
     if (ptr->right) {
         arr01[depth] = 1;
-        CreateCodes(ptr->right, depth + 1);
+        CreateCodes(ptr->right, depth + 1, lut_codes, lut_lengths);
     }
  
     if (ptr->leaf) {
-        gv_lut_lengths[ptr->ch] = depth;
+        lut_lengths[ptr->ch] = depth;
         for(char i = 0; i < depth; i++){
-            gv_lut_codes[ptr->ch] <<= 1;
+        	lut_codes[ptr->ch] <<= 1;
             if(arr01[i]){
-                gv_lut_codes[ptr->ch] |= 0x00000001;
+            	lut_codes[ptr->ch] |= 0x00000001;
             }
         }
         idx++;
     }
 }
 
-uint32_t zip(uint8_t * bin_buff, char * text_buf){
+uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len){
     // bytes 0 - 3 contain size of input text (less number - less significat byte)
     // byte 4 contains number of coded symbols
     // byte4 * 5 bytes contain symbol and four bytes of frequency for this symbol
@@ -214,20 +192,20 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf){
     *((uint32_t *) (&(bin_buff[0]))) = gv_text_len; // 4 bytes 0, 1, 2 and 3
 
     //table part
-    bin_buff[4] = gv_nodes_len;
+    bin_buff[4] = nodes_len;
     out_idx = H_OFFSET;
-    for(uint8_t i = 0; i < gv_nodes_len; i++){
-    	bin_buff[out_idx] = gv_arr_nodes[i]->ch;
+    for(uint8_t i = 0; i < nodes_len; i++){
+    	bin_buff[out_idx] = nodes_arr[i]->ch;
         out_idx++;
-        *((uint32_t *) (&(bin_buff[out_idx]))) = gv_arr_nodes[i]->freq;
+        *((uint32_t *) (&(bin_buff[out_idx]))) = nodes_arr[i]->freq;
         out_idx += 4;
     }
 
     //coding part
     out_idx_bit = out_idx * 8;
     for(int i = 0; i < gv_text_len; i++){
-        mask = gv_lut_codes[text_buf[i]];
-        for(char j = (gv_lut_lengths[text_buf[i]] - 1); j >=0; j--){
+        mask = lut_codes[text_buf[i]];
+        for(char j = (lut_lengths[text_buf[i]] - 1); j >=0; j--){
             out_idx = out_idx_bit / 8;
             shift = out_idx_bit % 8;
             if(mask & (1<<j)){
@@ -241,13 +219,13 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf){
     return(gv_bytes_len);
 }
 
-void unzip(uint8_t * bin_buff, char * text_buf){
+void unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
     // bytes 0 - 3 contain size of input text (less number - less significat byte)
     // byte 4 contains number of coded symbols
     // byte4 * 5 bytes contain symbol and four bytes of frequency for this symbol
     // after that coding itself goes
 
-    struct Node * ptr = gv_root;
+    struct Node * ptr = hf_root;
     uint32_t start_idx;
     uint32_t text_counter = 0;
  
@@ -265,7 +243,7 @@ void unzip(uint8_t * bin_buff, char * text_buf){
                 if(ptr->leaf){
                 	text_buf[text_counter] = ptr->ch;
                     text_counter++;
-                    ptr = gv_root;
+                    ptr = hf_root;
                 }
             }
         }else{                                      //0
@@ -274,17 +252,18 @@ void unzip(uint8_t * bin_buff, char * text_buf){
                 if(ptr->leaf){
                 	text_buf[text_counter] = ptr->ch;
                     text_counter++;
-                    ptr = gv_root;
+                    ptr = hf_root;
                 }
             }
         }
     }
 }
 
-void MakeFrequencies(char * source_file, char * text_buf){
+uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr){
     char ch;
     uint32_t in_idx = 0;
     uint32_t lut_frequencies[SYM_MAX] = {0};
+    uint8_t       gv_nodes_len = 0;                     //size of set of symbols to be coded in the Huffman tree
     FILE * in_f = fopen(source_file, "r");
 
     if(NULL == in_f){
@@ -320,31 +299,38 @@ void MakeFrequencies(char * source_file, char * text_buf){
         if(0 == max_f){
             break;
         }else{
-            gv_arr_nodes[gv_nodes_len] = CreateEmptyNode();
-            gv_arr_nodes[gv_nodes_len]->ch = max_j;
-            gv_arr_nodes[gv_nodes_len]->leaf = true;
-            gv_arr_nodes[gv_nodes_len]->freq = lut_frequencies[max_j];
+        	nodes_arr[gv_nodes_len] = CreateEmptyNode();
+        	nodes_arr[gv_nodes_len]->ch = max_j;
+        	nodes_arr[gv_nodes_len]->leaf = true;
+        	nodes_arr[gv_nodes_len]->freq = lut_frequencies[max_j];
             gv_nodes_len++; //increment the global variable
             lut_frequencies[max_j] = 0;
         }
     }
+    return(gv_nodes_len);
 }
 
 void compress(char * source_file, char * output_file){
     __label__ FINISH;
     uint8_t * gv_bin_big_buff = (uint8_t *)malloc(sizeof(uint8_t) * MAX_BUFFER);
     char * gv_text_big_buff = (char *)calloc(MAX_BUFFER, sizeof(char));
-    MakeFrequencies(source_file, gv_text_big_buff);
+    struct Node * gv_arr_nodes[SYM_MAX] = {NULL};     //array of nodes for building the Huffman tree
+    uint32_t      gv_lut_codes[SYM_MAX] = {0};        //look up table to get code for compression
+    uint8_t       gv_lut_lengths[SYM_MAX] = {0};      //look up table to get length of code for compression
+    uint8_t       gv_nodes_len;                     //size of set of symbols to be coded in the Huffman tree
+    struct Node * gv_root = NULL;
+
+    gv_nodes_len = MakeFrequencies(source_file, gv_text_big_buff, gv_arr_nodes);
     if(gv_code_error){ printf(" ERROR!!! Unaccepted symbol code"); goto FINISH; }
-    gv_root = CreateHuffTree();
+    gv_root = CreateHuffTree(gv_arr_nodes, gv_nodes_len);
 
     if(gv_root){
-        CreateCodes(gv_root, 0);
+        CreateCodes(gv_root, 0, gv_lut_codes, gv_lut_lengths);
     }else{
         printf("Something went wrong during Huffman tree creatiion\n");
     }
 
-    zip(gv_bin_big_buff, gv_text_big_buff);
+    zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len);
     DeleteTree(gv_root);
 
     FILE *write_ptr;
@@ -360,6 +346,10 @@ void uncompress(char * source_file, char * output_file){
     uint8_t rd_buf;
     uint8_t * gv_bin_big_buff = malloc(sizeof(uint8_t) * MAX_BUFFER);
     char * gv_text_big_buff = (char *)calloc(MAX_BUFFER, sizeof(char));
+    struct Node * gv_arr_nodes[SYM_MAX] = {NULL};     //array of nodes for building the Huffman tree
+    uint8_t       gv_nodes_len = 0;                     //size of set of symbols to be coded in the Huffman tree
+    struct Node * gv_root = NULL;                     //pointer to the root of the Huffman tree
+
     //read binary from input file
     FILE *f_ptr;
     f_ptr = fopen(source_file,"rb");  // r for read, b for binary
@@ -389,10 +379,10 @@ void uncompress(char * source_file, char * output_file){
             fr = *((uint32_t *) (&(gv_bin_big_buff[H_OFFSET + i * S_COEFF + 1])));
             gv_arr_nodes[i]->freq = fr;
         }
-        gv_root = CreateHuffTree();
+        gv_root = CreateHuffTree(gv_arr_nodes, gv_nodes_len);
 
         //decode text
-        unzip(gv_bin_big_buff, gv_text_big_buff);
+        unzip(gv_bin_big_buff, gv_text_big_buff, gv_root);
 
         DeleteTree(gv_root);
 
