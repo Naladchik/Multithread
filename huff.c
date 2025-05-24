@@ -4,12 +4,6 @@
 #include <stdbool.h>
 #include "huff.h"
 
-/* Global variables */
-uint32_t      gv_bytes_len = 0;                   //number of bytes in the buffer including the header
-
-bool gv_code_error = false;
-
-
 /* Function definitions */
 struct Node * CreateEmptyNode(void){
     struct Node * a_node = malloc(sizeof(struct Node));
@@ -211,8 +205,7 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
         }       
     }
 
-    gv_bytes_len = out_idx + 1;
-    return(gv_bytes_len);
+    return(out_idx + 1);
 }
 
 uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
@@ -256,7 +249,7 @@ uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
     return(read_text_len);
 }
 
-uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr, uint32_t* txt_len){
+uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr, uint32_t* txt_len, bool* gv_code_error){
     char ch;
     uint32_t in_idx = 0;
     uint32_t lut_frequencies[SYM_MAX] = {0};
@@ -270,7 +263,7 @@ uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** node
             ch = fgetc(in_f);
             if(-1 > ch){ // -1 because EOF is accepted
                 printf("wrong symbol %c, code %d\n", ch, ch);
-                gv_code_error = true;
+                *gv_code_error = true;
             }else{
             	text_buf[in_idx] = ch;
                 in_idx++;
@@ -317,8 +310,10 @@ void compress(char * source_file, char * output_file){
     uint8_t       gv_nodes_len;                     //size of set of symbols to be coded in the Huffman tree
     struct Node * gv_root = NULL;
     uint32_t      gv_text_len = 0;                    //length of text stored in gv_text_big_buff in symbomls
+    uint32_t      cm_bytes_len = 0;                   //number of bytes in the buffer including the header
+    bool gv_code_error = false;
 
-    gv_nodes_len = MakeFrequencies(source_file, gv_text_big_buff, gv_arr_nodes, &gv_text_len);
+    gv_nodes_len = MakeFrequencies(source_file, gv_text_big_buff, gv_arr_nodes, &gv_text_len, &gv_code_error);
     if(gv_code_error){ printf(" ERROR!!! Unaccepted symbol code"); goto FINISH; }
     gv_root = CreateHuffTree(gv_arr_nodes, gv_nodes_len);
 
@@ -328,12 +323,12 @@ void compress(char * source_file, char * output_file){
         printf("Something went wrong during Huffman tree creatiion\n");
     }
 
-    zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len, gv_text_len);
+    cm_bytes_len = zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len, gv_text_len);
     DeleteTree(gv_root);
 
     FILE *write_ptr;
     write_ptr = fopen(output_file,"wb");  // w for write, b for binary
-    fwrite(gv_bin_big_buff, gv_bytes_len, 1, write_ptr);
+    fwrite(gv_bin_big_buff, cm_bytes_len, 1, write_ptr);
     fclose(write_ptr);
     free(gv_bin_big_buff);
     free(gv_text_big_buff);
@@ -347,6 +342,7 @@ void uncompress(char * source_file, char * output_file){
     struct Node * gv_arr_nodes[SYM_MAX] = {NULL};     //array of nodes for building the Huffman tree
     uint8_t       gv_nodes_len = 0;                     //size of set of symbols to be coded in the Huffman tree
     struct Node * gv_root = NULL;                     //pointer to the root of the Huffman tree
+    uint32_t      unc_bytes_len = 0;                   //number of bytes in the buffer including the header
 
     //read binary from input file
     FILE *f_ptr;
@@ -355,12 +351,12 @@ void uncompress(char * source_file, char * output_file){
     if(NULL == f_ptr){
         printf("file %s couldn't be opened (uncompress()).\n", source_file);
     }else{
-        gv_bytes_len = 0;
+    	unc_bytes_len = 0;
         for(uint32_t i = 0; i < MAX_BUFFER; i++){
             if(fread(&rd_buf, 1, 1 ,f_ptr)){
                 gv_bin_big_buff[i] = rd_buf;
             }else{
-                gv_bytes_len = i - 1;
+                unc_bytes_len = i - 1;
                 break;
             }        
         }

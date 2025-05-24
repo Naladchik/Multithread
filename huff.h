@@ -27,7 +27,7 @@ uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root); //de
 struct Node * CreateHuffTree(struct Node ** nodes_arr, uint8_t nodes_len);
 void DeleteTree(struct Node * d_root);
 void CreateCodes(struct Node * ptr, int depth, uint32_t* lut_codes, uint8_t* lengths); // depth argument is needed to implement recursion. Needs the Huffman tree to be ready
-uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr, uint32_t* txt_len); // makes input array of nodes already sorted and ready for the Huffman tree building
+uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** nodes_arr, uint32_t* txt_len, bool* gv_code_error); // makes input array of nodes already sorted and ready for the Huffman tree building
 struct Node * CreateEmptyNode(void); //utility function
 
 
