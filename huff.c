@@ -290,7 +290,7 @@ void MakeFrequencies(char * source_file){
     FILE * in_f = fopen(source_file, "r");
 
     if(NULL == in_f){
-        printf("file %s couldn't be opened.\n", source_file);
+        printf("file %s couldn't be opened (MakeFrequencies()).\n", source_file);
     }else{
         do{
             ch = fgetc(in_f);
@@ -362,7 +362,7 @@ void uncompress(char * source_file, char * output_file){
     f_ptr = fopen(source_file,"rb");  // r for read, b for binary
 
     if(NULL == f_ptr){
-        printf("file %s couldn't be opened.\n", source_file);
+        printf("file %s couldn't be opened (uncompress()).\n", source_file);
     }else{
         gv_bytes_len = 0;
         for(uint32_t i = 0; i < MAX_BUFFER; i++){

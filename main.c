@@ -7,15 +7,18 @@
 #include <dirent.h>
 #include "huff.h"
 
+#define MAX_LEN 200
 #define MAX_IN_PROGRESS 100
 #define IN_DIR "to_compress"
 #define OUT_DIR "compressed"
 
+#define VALIDATION_FILE "to_compress/text1_val"
+
 char str_arr[100][100];
 
 struct MondStruct{ //Monitored tasks. One variable per task passed as argument.
-	char* in_file;
-	char* out_file;
+	char in_file[MAX_LEN];
+	char out_file[MAX_LEN];
 	int num;
 };
 
@@ -37,7 +40,7 @@ void* monitor_thr(void* m_arg){
 			((struct MonStruct *)m_arg)->progress[i] += 0.01;
 			if(((struct MonStruct *)m_arg)->progress[i] < 100.0) any_in_progress = true;
 		}
-		sleep(0.1);
+		sleep(0.05);
 		if(!any_in_progress) break;
 		//clear_screen(100, ((struct MonStruct *)m_arg)->task_num);
 		printf("\n\n");
@@ -47,21 +50,9 @@ void* monitor_thr(void* m_arg){
 }
 
 void* monitored_thr(void* md_arg){
-//	printf("task %d started, input: [%s], output: [%s]\n",
-//			((struct MondStruct*)md_arg)->num,
-//			((struct MondStruct*)md_arg)->in_file,
-//			((struct MondStruct*)md_arg)->out_file);
-
-//	do
-//	{
-//		pthread_mutex_lock(&mon_arg_lock);
-//		mon_arg.progress[((struct MondStruct*)md_arg)->num] += 2.0;
-//		pthread_mutex_unlock(&mon_arg_lock);
-//		if(mon_arg.progress[((struct MondStruct*)md_arg)->num] >= 100.1) break;
-//		sleep(0.15);
-//	}
-//	while(1);
 	compress(((struct MondStruct*)md_arg)->in_file, ((struct MondStruct*)md_arg)->out_file);
+	mon_arg.progress[((struct MondStruct*)md_arg)->num] = 50.0;
+	uncompress(((struct MondStruct*)md_arg)->out_file, VALIDATION_FILE);
 	mon_arg.progress[((struct MondStruct*)md_arg)->num] = 100.0;
 	printf("task completed\n");
 	return NULL;
@@ -105,20 +96,21 @@ int main() {
     struct MondStruct* thr_arg_arr = (struct MondStruct*)malloc(sizeof(struct MondStruct) * mon_arg.task_num);
     for(int i = 0; i < mon_arg.task_num; i++){
     	thr_arg_arr[i].num = i;
-    	char str_buf[100];
+    	char str_buf[200];
     	strcpy(str_buf, IN_DIR);
     	strcat(str_buf, "/");
     	strcat(str_buf, str_arr[i]);
-    	thr_arg_arr[i].in_file = str_buf;
+    	strcpy(thr_arg_arr[i].in_file, str_buf);
     	strcpy(str_buf, OUT_DIR);
     	strcat(str_buf, "/");
     	strcat(str_buf, str_arr[i]);
-    	strcat(str_buf, ".xxx");
-    	thr_arg_arr[i].out_file = str_buf;
+    	strcat(str_buf, ".zip");
+    	strcpy(thr_arg_arr[i].out_file, str_buf);
     }
 
     pthread_create(&thread_main, NULL, monitor_thr, &mon_arg);
     for(int i = 0; i < mon_arg.task_num; i++){
+    	printf("Arg passed: %s %s\n", thr_arg_arr[i].in_file, thr_arg_arr[i].out_file);
     	pthread_create(&(thr_arr[i]), NULL, monitored_thr, &(thr_arg_arr[i]));
     	sleep(0.3);
     }
