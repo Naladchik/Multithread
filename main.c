@@ -9,8 +9,8 @@
 
 #define MAX_LEN 200
 #define MAX_IN_PROGRESS 100
-#define IN_DIR "to_compress"
-#define OUT_DIR "compressed"
+#define C_DIR "to_compress" //C means 'directory containing file to COMPRESS
+#define U_DIR "compressed"  //U means 'directory containing file to UNCOMPRESS
 
 //#define VALIDATION_FILE "to_compress/text1_val"
 
@@ -51,8 +51,8 @@ void* monitor_thr(void* m_arg){
 }
 
 void* monitored_thr(void* md_arg){
-	if(cu_var == 'c') compress(((struct MondStruct*)md_arg)->in_file, ((struct MondStruct*)md_arg)->out_file, &(mon_arg.progress[((struct MondStruct*)md_arg)->num]));
-	//if(cu_var == 'u') uncompress(((struct MondStruct*)md_arg)->out_file, VALIDATION_FILE, &(mon_arg.progress[((struct MondStruct*)md_arg)->num]));
+	if(cu_var == 'c')   compress(((struct MondStruct*)md_arg)->in_file, ((struct MondStruct*)md_arg)->out_file, &(mon_arg.progress[((struct MondStruct*)md_arg)->num]));
+	if(cu_var == 'u') uncompress(((struct MondStruct*)md_arg)->in_file, ((struct MondStruct*)md_arg)->out_file, &(mon_arg.progress[((struct MondStruct*)md_arg)->num]));
 	return NULL;
 }
 
@@ -76,9 +76,9 @@ int main() {
 	int file_c_counter = 0;
 	int file_u_counter = 0;
 	struct dirent *dir;
-	d = opendir(IN_DIR);
+	d = opendir(C_DIR);
 	if (d) {
-		printf("directory [%s] opened\n", IN_DIR);
+		printf("directory [%s] opened\n", C_DIR);
 		while ((dir = readdir(d)) != NULL) {
 			f_str = dir->d_name;
 			if(f_str[0] != '.'){
@@ -90,12 +90,12 @@ int main() {
 	    closedir(d);
 	    printf("there are [%d] files to compress\n\n", file_c_counter);
 	}else{
-		printf("Could not open directory: %s", IN_DIR);
+		printf("Could not open directory: %s", C_DIR);
 	}
 
-	d = opendir(OUT_DIR);
+	d = opendir(U_DIR);
 	if (d) {
-			printf("directory [%s] opened\n", OUT_DIR);
+			printf("directory [%s] opened\n", U_DIR);
 			while ((dir = readdir(d)) != NULL) {
 				f_str = dir->d_name;
 				if(f_str[0] != '.'){
@@ -107,7 +107,7 @@ int main() {
 		    closedir(d);
 		    printf("there are [%d] files to uncompress\n\n", file_u_counter);
 		}else{
-			printf("Could not open directory: %s", OUT_DIR);
+			printf("Could not open directory: %s", U_DIR);
 		}
 
 	do{
@@ -121,6 +121,22 @@ int main() {
 	else if(cu_var == 'u')
 		mon_arg.task_num = file_u_counter;
 
+	char* c_dir = C_DIR;
+	char* u_dir = U_DIR;
+	char* in_dir;
+	char* out_dir;
+
+	if(cu_var == 'c'){
+		in_dir = c_dir;
+		out_dir = u_dir;
+	}else if(cu_var == 'u'){
+		in_dir = u_dir;
+		out_dir = c_dir;
+	}
+
+	printf("in_dir: %s\n", in_dir);
+	printf("out_dir: %s\n", out_dir);
+
 	/*
 	 THREADS CREATED HERE
 	 */
@@ -130,15 +146,27 @@ int main() {
     for(int i = 0; i < mon_arg.task_num; i++){
     	thr_arg_arr[i].num = i;
     	char str_buf[200];
-    	strcpy(str_buf, IN_DIR);
-    	strcat(str_buf, "/");
-    	strcat(str_buf, str_arr_c[i]);
-    	strcpy(thr_arg_arr[i].in_file, str_buf);
-    	strcpy(str_buf, OUT_DIR);
-    	strcat(str_buf, "/");
-    	strcat(str_buf, str_arr_c[i]);
-    	strcat(str_buf, ".zip");
-    	strcpy(thr_arg_arr[i].out_file, str_buf);
+    	if(cu_var == 'c'){
+    		strcpy(str_buf, in_dir);
+    		strcat(str_buf, "/");
+    		strcat(str_buf, str_arr_c[i]);
+    		strcpy(thr_arg_arr[i].in_file, str_buf);
+    		strcpy(str_buf, out_dir);
+    		strcat(str_buf, "/");
+    		strcat(str_buf, str_arr_c[i]);
+    		strcat(str_buf, ".zip");
+    		strcpy(thr_arg_arr[i].out_file, str_buf);
+    	}else{
+    		strcpy(str_buf, in_dir);
+    		strcat(str_buf, "/");
+       		strcat(str_buf, str_arr_u[i]);
+       		strcpy(thr_arg_arr[i].in_file, str_buf);
+       		strcpy(str_buf, out_dir);
+       		strcat(str_buf, "/");
+       		strcat(str_buf, str_arr_u[i]);
+       		strcat(str_buf, "_decompressed");
+       		strcpy(thr_arg_arr[i].out_file, str_buf);
+    	}
     }
 
     pthread_create(&thread_main, NULL, monitor_thr, &mon_arg);
