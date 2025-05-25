@@ -20,7 +20,7 @@ struct Node{
 };
 
 /* Function declarations */
-void compress(char * source_file, char * output_file, float* progress);   //main compression function
+void   compress(char * source_file, char * output_file, float* progress);   //main compression function
 void uncompress(char * source_file, char * output_file, float* progress); //main decompression function
 uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len, uint32_t text_len, float* progress);  //compression function (needs text buffer and codes to be prepared)
 uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root, float* progress); //decompression function (needs bytes buffer and Huffman tree to be prepared)

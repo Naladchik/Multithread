@@ -5,6 +5,8 @@
 #include "huff.h"
 #include "monitor.h"
 
+#define EPSILON 0.33
+
 /* Function definitions */
 struct Node * CreateEmptyNode(void){
     struct Node * a_node = malloc(sizeof(struct Node));
@@ -182,14 +184,31 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
 
     *((uint32_t *) (&(bin_buff[0]))) = text_len; // 4 bytes 0, 1, 2 and 3
 
+	#define THE_PART 5.0
+
     //table part
     bin_buff[4] = nodes_len;
+    float loc_pr = 0;
+    float old_loc_pr = 0;
+    char flag100 = 0;
     out_idx = H_OFFSET;
     for(uint8_t i = 0; i < nodes_len; i++){
     	bin_buff[out_idx] = nodes_arr[i]->ch;
         out_idx++;
         *((uint32_t *) (&(bin_buff[out_idx]))) = nodes_arr[i]->freq;
         out_idx += 4;
+        loc_pr = ((float)i) / ((float)nodes_len) * THE_PART;
+        pthread_mutex_lock(&mon_arg_lock);
+        *progress = loc_pr;
+        if(loc_pr - old_loc_pr > EPSILON){
+            pthread_cond_signal(&cond);
+            old_loc_pr = loc_pr;
+        }
+        if((loc_pr > 99.999) && (!flag100)){
+            pthread_cond_signal(&cond);
+            flag100 = 1;
+        }
+        pthread_mutex_unlock(&mon_arg_lock);
     }
 
     //coding part
@@ -203,7 +222,19 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
             	bin_buff[out_idx] |= (0x80 >> (shift));
             }
             out_idx_bit++;
-        }       
+        }
+        loc_pr = THE_PART + ((float)i) / ((float)text_len) * (100.0 - THE_PART);
+        pthread_mutex_lock(&mon_arg_lock);
+        *progress = loc_pr;
+        if(loc_pr - old_loc_pr > EPSILON){
+            pthread_cond_signal(&cond);
+            old_loc_pr = loc_pr;
+        }
+        if((loc_pr > 99.999) && (!flag100)){
+            pthread_cond_signal(&cond);
+            flag100 = 1;
+        }
+        pthread_mutex_unlock(&mon_arg_lock);
     }
     return(out_idx + 1);
 }
@@ -223,7 +254,9 @@ uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root, float
 
     // extract length of text
     uint32_t read_text_len = *((uint32_t *) (&(bin_buff[0])));
-
+    float loc_pr = 0;
+    float old_loc_pr = 0;
+    char flag100 = 0;
     for(uint32_t i = start_idx; i < 4000000000; i++){ // go bit by bit from MSB to LSB
         if(text_counter == read_text_len) break;
         if(bin_buff[i/8] & (0x80 >> (i%8))){ //1
@@ -245,6 +278,18 @@ uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root, float
                 }
             }
         }
+        loc_pr = ((float)text_counter) / ((float)read_text_len) * 100.0;
+        pthread_mutex_lock(&mon_arg_lock);
+        *progress = loc_pr;
+        if(loc_pr - old_loc_pr > EPSILON){
+        	pthread_cond_signal(&cond);
+        	old_loc_pr = loc_pr;
+        }
+        if((loc_pr > 99.999) && (!flag100)){
+            pthread_cond_signal(&cond);
+            flag100 = 1;
+        }
+        pthread_mutex_unlock(&mon_arg_lock);
     }
     return(read_text_len);
 }

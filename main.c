@@ -31,6 +31,7 @@ struct MonStruct{
 /* SHARED VARIABLES */
 struct MonStruct mon_arg;  // One variable (containing array of floats) for all tasks. Implicitly updated from tasks.
 pthread_mutex_t mon_arg_lock;
+pthread_cond_t cond;
 char cu_var;  //not used in multi threading
 
 void* monitor_thr(void* m_arg){
@@ -39,12 +40,13 @@ void* monitor_thr(void* m_arg){
 		bool any_in_progress = false;
 		for(int i = 0; i < ((struct MonStruct *)m_arg)->task_num; i++){
 			printf("[task %d]: %.1f%%\n", i, ((struct MonStruct *)m_arg)->progress[i]);
-			if(((struct MonStruct *)m_arg)->progress[i] < 100.0) any_in_progress = true;
+			if(((struct MonStruct *)m_arg)->progress[i] < 99.99) any_in_progress = true;
 		}
-		sleep(0.2);
 		if(!any_in_progress) break;
-		//clear_screen(100, ((struct MonStruct *)m_arg)->task_num);
 		printf("\n\n");
+		pthread_mutex_lock(&mon_arg_lock);
+		pthread_cond_wait(&cond, &mon_arg_lock);
+		pthread_mutex_unlock(&mon_arg_lock);
 	}
 	while(1);
 	return NULL;
