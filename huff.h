@@ -1,6 +1,7 @@
 #ifndef HUFF_H
 #define HUFF_J
 #include <stdint.h>
+#include <pthread.h>
 
 /* Defines */
 #define SYM_MAX 255
@@ -19,10 +20,10 @@ struct Node{
 };
 
 /* Function declarations */
-void compress(char * source_file, char * output_file);   //main compression function
-void uncompress(char * source_file, char * output_file); //main decompression function
-uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len, uint32_t text_len);  //compression function (needs text buffer and codes to be prepared)
-uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root); //decompression function (needs bytes buffer and Huffman tree to be prepared)
+void compress(char * source_file, char * output_file, float* progress);   //main compression function
+void uncompress(char * source_file, char * output_file, float* progress); //main decompression function
+uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len, uint32_t text_len, float* progress);  //compression function (needs text buffer and codes to be prepared)
+uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root, float* progress); //decompression function (needs bytes buffer and Huffman tree to be prepared)
 
 struct Node * CreateHuffTree(struct Node ** nodes_arr, uint8_t nodes_len);
 void DeleteTree(struct Node * d_root);

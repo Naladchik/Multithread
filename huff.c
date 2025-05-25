@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "huff.h"
+#include "monitor.h"
 
 /* Function definitions */
 struct Node * CreateEmptyNode(void){
@@ -167,7 +168,7 @@ void CreateCodes(struct Node* ptr, int depth, uint32_t* lut_codes, uint8_t* lut_
     }
 }
 
-uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len, uint32_t text_len){
+uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint32_t* lut_codes, uint8_t* lut_lengths, uint8_t nodes_len, uint32_t text_len, float* progress){
     // bytes 0 - 3 contain size of input text (less number - less significat byte)
     // byte 4 contains number of coded symbols
     // byte4 * 5 bytes contain symbol and four bytes of frequency for this symbol
@@ -204,11 +205,10 @@ uint32_t zip(uint8_t * bin_buff, char * text_buf, struct Node ** nodes_arr, uint
             out_idx_bit++;
         }       
     }
-
     return(out_idx + 1);
 }
 
-uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root){
+uint32_t unzip(uint8_t * bin_buff, char * text_buf, struct Node * hf_root, float* progress){
     // bytes 0 - 3 contain size of input text (less number - less significat byte)
     // byte 4 contains number of coded symbols
     // byte4 * 5 bytes contain symbol and four bytes of frequency for this symbol
@@ -300,7 +300,7 @@ uint8_t MakeFrequencies(char * source_file, char * text_buf, struct Node ** node
     return(gv_nodes_len);
 }
 
-void compress(char * source_file, char * output_file){
+void compress(char * source_file, char * output_file, float* progress){
     __label__ FINISH;
     uint8_t * gv_bin_big_buff = (uint8_t *)malloc(sizeof(uint8_t) * MAX_BUFFER);
     char * gv_text_big_buff = (char *)calloc(MAX_BUFFER, sizeof(char));
@@ -323,7 +323,7 @@ void compress(char * source_file, char * output_file){
         printf("Something went wrong during Huffman tree creatiion\n");
     }
 
-    cm_bytes_len = zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len, gv_text_len);
+    cm_bytes_len = zip(gv_bin_big_buff, gv_text_big_buff, gv_arr_nodes, gv_lut_codes, gv_lut_lengths, gv_nodes_len, gv_text_len, progress);
     DeleteTree(gv_root);
 
     FILE *write_ptr;
@@ -333,9 +333,12 @@ void compress(char * source_file, char * output_file){
     free(gv_bin_big_buff);
     free(gv_text_big_buff);
     FINISH:;
+    pthread_mutex_lock(&mon_arg_lock);
+    *progress = 100.0;
+    pthread_mutex_unlock(&mon_arg_lock);
 }
 
-void uncompress(char * source_file, char * output_file){
+void uncompress(char * source_file, char * output_file, float* progress){
     uint8_t rd_buf;
     uint8_t * gv_bin_big_buff = malloc(sizeof(uint8_t) * MAX_BUFFER);
     char * gv_text_big_buff = (char *)calloc(MAX_BUFFER, sizeof(char));
@@ -376,7 +379,7 @@ void uncompress(char * source_file, char * output_file){
         gv_root = CreateHuffTree(gv_arr_nodes, gv_nodes_len);
 
         //decode text
-        uint32_t text_len = unzip(gv_bin_big_buff, gv_text_big_buff, gv_root);
+        uint32_t text_len = unzip(gv_bin_big_buff, gv_text_big_buff, gv_root, progress);
 
         DeleteTree(gv_root);
 
@@ -389,6 +392,9 @@ void uncompress(char * source_file, char * output_file){
     }
     free(gv_bin_big_buff);
     free(gv_text_big_buff);
+    pthread_mutex_lock(&mon_arg_lock);
+    *progress = 100.0;
+    pthread_mutex_unlock(&mon_arg_lock);
 }
 
 void DeleteTree(struct Node * d_root){
