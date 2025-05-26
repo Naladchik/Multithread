@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <dirent.h>
+#include <ncurses.h>
 #include "huff.h"
 
 #define MAX_LEN 200
@@ -35,20 +36,53 @@ pthread_cond_t cond;
 char cu_var;  //not used in multi threading
 
 void* monitor_thr(void* m_arg){
+	char str_buf[100] = {'\0'};
+	initscr();
+	cbreak();
+	noecho();
+
+	clear();
+
 	do
 	{
+//		bool any_in_progress = false;
+//		for(int i = 0; i < ((struct MonStruct *)m_arg)->task_num; i++){
+//			if(((struct MonStruct *)m_arg)->progress[i] < 99.99){
+//				any_in_progress = true;
+//				printf("[task %d]: %.1f%%\n", i, ((struct MonStruct *)m_arg)->progress[i]);
+//			}else{
+//				printf("[task %d]: Done\n", i);
+//			}
+//		}
+//		if(!any_in_progress) break;
+//		printf("\n\n");
+
 		bool any_in_progress = false;
 		for(int i = 0; i < ((struct MonStruct *)m_arg)->task_num; i++){
-			printf("[task %d]: %.1f%%\n", i, ((struct MonStruct *)m_arg)->progress[i]);
-			if(((struct MonStruct *)m_arg)->progress[i] < 99.99) any_in_progress = true;
+			if(((struct MonStruct *)m_arg)->progress[i] < 99.99){
+				any_in_progress = true;
+				sprintf(str_buf, "[task %d]: %.1f%%                   \n", i, ((struct MonStruct *)m_arg)->progress[i]);
+			}else{
+				sprintf(str_buf, "[task %d]: Done                     \n", i);
+			}
+			mvaddstr(i, 0, str_buf);
 		}
 		if(!any_in_progress) break;
-		printf("\n\n");
+
+		refresh();
+
 		pthread_mutex_lock(&mon_arg_lock);
 		pthread_cond_wait(&cond, &mon_arg_lock);
 		pthread_mutex_unlock(&mon_arg_lock);
 	}
 	while(1);
+
+	mvaddstr(((struct MonStruct *)m_arg)->task_num, 0, "PROGRAM FINISHED. PRESS ANY KEY.\n");
+	refresh();
+
+	getch();
+	endwin();
+
 	return NULL;
 }
 
